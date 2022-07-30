@@ -1,0 +1,3 @@
+Module,Frequency,N,M,Max Precision (bits),Min Precision (bits),Area (um^2),Leakage Power (nW),Dynamic Power (nW),Total Power (nW)
+systolic_array,500000000,1,1,8,4, 1 ,64314,279960,344300
+systolic_array,500000000,1,1,6,6, 1 ,28458,123882,152352
