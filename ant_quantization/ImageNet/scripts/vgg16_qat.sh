@@ -1,4 +1,7 @@
 mkdir -p log
+
+# Run on NVIDIA A100.
+
 #Int
 python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46666 main.py --dataset=imagenet --model=vgg16_bn --epoch=2 --mode=int --wbit=4 --abit=4 --batch_size=128 --lr=0.0001 --train > ./log/vgg16_bn_Int.log 2>&1
 

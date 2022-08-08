@@ -1,4 +1,7 @@
 mkdir -p log
+
+# Run on the server with 4 NVIDIA A10 GPUs.
+
 #Int
 python -u -m torch.distributed.launch --nproc_per_node=4 --master_port 46666 main.py --dataset=imagenet --model=resnet50 --epoch=2 --mode=int --wbit=4 --abit=4 --batch_size=64 --lr=0.00005 --train > ./log/resnet50_Int.log 2>&1
 

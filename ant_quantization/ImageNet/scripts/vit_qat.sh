@@ -1,4 +1,7 @@
 mkdir -p log
+
+# Run on the server with 4 NVIDIA A10 GPUs.
+
 #Int
 python -u -m torch.distributed.launch --nproc_per_node=4 --master_port 46666 main.py --dataset=imagenet --model=vit_b_16 --epoch=1 --mode=int --wbit=4 --abit=4 --batch_size=56 --lr=5e-05 -wl=80  -al=25  --train > ./log/vit_Int.log 2>&1
 

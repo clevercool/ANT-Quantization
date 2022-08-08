@@ -3,15 +3,15 @@ We evaluate the results with models in image classification and NLP.
 ## Paper's Hardware Configuration
 
 + Intel(R) Xeon(R) Platinum 8358 CPU @ 2.60GHz
-+ NVIDIA A100 (**Recommend executing the ANT quantization on this GPU**)
-+ 4 * NVIDIA A10 (For fine-tuning)
++ NVIDIA A100 GPU (40GB)
++ 4 * NVIDIA A10 GPUs (24GB)
 
 ## Environment
 ```
-# PyTorch 1.12
-conda create -n ant_eval python=3.8 
-conda activate ant_eval
-conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
+# PyTorch 1.11
+conda create -n ant_quant python=3.8 
+conda activate ant_quant
+conda install  pytorch=1.11.0 torchvision torchaudio cudatoolkit=11.3 -c pytorch
 # Quantization CUDA kernel
 pip install ./quant
 

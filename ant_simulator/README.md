@@ -1,6 +1,6 @@
 # ANT Simulator
 
-This repository contains the source code for a research paper that published at MICRO2022.
+This repository contains the code for the ANT simulator based on DNNWeaver and BitFusion.
 
 ## Prerequisite
 
@@ -21,7 +21,7 @@ $ cd ./ant_isca_dev/ant_simulator
 $ git clone https://github.com/HewlettPackard/cacti ./bitfusion/sram/cacti/
 $ make -C ./bitfusion/sram/cacti/
 $ # Run ANT simulation.
-$ python ./run_ant.py
+$ python ./run_ant.py       # About 15 minutes
 ```
 
 ## Evaluation

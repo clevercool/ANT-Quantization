@@ -1,4 +1,7 @@
 mkdir -p log
+
+# Run on the server with 4 NVIDIA A10 GPUs.
+
 #Int
 CUDA_VISIBLE_DEVICES=0 python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46666 main.py --dataset=imagenet --model=resnet18 --epoch=2 --mode=int --wbit=4 --abit=4 --batch_size=256 --lr=0.00005 --train > ./log/resnet18_Int.log 2>&1
 

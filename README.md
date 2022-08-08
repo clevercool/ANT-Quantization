@@ -19,8 +19,6 @@ This repository contains the source code for reproducing the experiments in the 
 │   ├── quant                               # Quantization CUDA kernel.
 │   └── result                              # Our test results.
 ├── ant_simulator                           # The performance and energy evaluation of ANT.
-│   ├── bitfusion
-│   ├── docs
 │   ├── results                             # Our test results.
 │   └── run_ant.py                          # The scripts are for reproducing the experiment data in Figure 13.
 ```
