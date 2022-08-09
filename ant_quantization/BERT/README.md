@@ -29,4 +29,12 @@ The result may have a little random error ($\pm$ 0.5%) due to the rounding CUDA 
 ./scripts/eval_cola.sh      # It takes about 25 mins.
 ./scripts/eval_sst2.sh      # It takes about 2h.
 ./scripts/eval_mnli.sh      # It takes about 3 mins to pre-process, and 15h to fine-tune.
+
 ```
+
+The accuracy results are listed in the following table. 
+| Network | Int  | IP | FIP | IP-F | FIP-F | ANT4-8 |
+| :----:| :----: | :----: | :----: | :----: | :----: | :----: |
+| CoLA | 0.00  | 52.61 | 52.61 | 53.91 | 53.91 | 56.33  |
+| SST-2 | 79.93 | 92.20 | 92.20 | 92.43 | 92.43 | 92.43 |
+| MNLI | 54.46 | 83.04 |83.04 | 83.45 | 83.45 |83.72 |

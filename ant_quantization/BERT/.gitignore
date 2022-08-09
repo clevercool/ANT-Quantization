@@ -138,6 +138,6 @@ pretrained_model
 # glue
 glue
 
-/model/*
+/model/
 /figure*
 *.tar.gz
