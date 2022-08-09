@@ -1,6 +1,6 @@
-python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46667 main.py --dataset=imagenet --model=resnet50 --mode=int --batch_size=64 -r --ckpt_path=./checkpoints/resnet50_int.pth
-python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46667 main.py --dataset=imagenet --model=resnet50 --mode=ant --batch_size=64 -r --ckpt_path=./checkpoints/resnet50_ip.pth
-python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46667 main.py --dataset=imagenet --model=resnet50 --mode=ant --batch_size=64 -r --ckpt_path=./checkpoints/resnet50_fip.pth
-python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46667 main.py --dataset=imagenet --model=resnet50 --mode=ant --batch_size=64 -r --ckpt_path=./checkpoints/resnet50_ip_f.pth
-python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46667 main.py --dataset=imagenet --model=resnet50 --mode=ant --batch_size=64 -r --ckpt_path=./checkpoints/resnet50_fip_f.pth
-python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46667 main.py --dataset=imagenet --model=resnet50 --mode=ant --batch_size=64 -r --ckpt_path=./checkpoints/resnet50_ant48.pth
+python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46667 main.py --dataset=imagenet --model=resnet50 --mode=int --batch_size=256 -r --ckpt_path=./checkpoints/resnet50_int.pth
+python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46667 main.py --dataset=imagenet --model=resnet50 --mode=ant --batch_size=256 -r --ckpt_path=./checkpoints/resnet50_ip.pth
+python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46667 main.py --dataset=imagenet --model=resnet50 --mode=ant --batch_size=256 -r --ckpt_path=./checkpoints/resnet50_fip.pth
+python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46667 main.py --dataset=imagenet --model=resnet50 --mode=ant --batch_size=256 -r --ckpt_path=./checkpoints/resnet50_ip_f.pth
+python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46667 main.py --dataset=imagenet --model=resnet50 --mode=ant --batch_size=256 -r --ckpt_path=./checkpoints/resnet50_fip_f.pth
+python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46667 main.py --dataset=imagenet --model=resnet50 --mode=ant --batch_size=256 -r --ckpt_path=./checkpoints/resnet50_ant48.pth

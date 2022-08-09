@@ -1,6 +1,6 @@
-python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46670 main.py --dataset=imagenet --model=vit_b_16 --mode=int --batch_size=56 -r --ckpt_path=./checkpoints/vit_int.pth
-python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46670 main.py --dataset=imagenet --model=vit_b_16 --mode=ant --batch_size=56 -r --ckpt_path=./checkpoints/vit_ip.pth
-python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46670 main.py --dataset=imagenet --model=vit_b_16 --mode=ant --batch_size=56 -r --ckpt_path=./checkpoints/vit_fip.pth
-python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46670 main.py --dataset=imagenet --model=vit_b_16 --mode=ant --batch_size=56 -r --ckpt_path=./checkpoints/vit_ip_f.pth
-python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46670 main.py --dataset=imagenet --model=vit_b_16 --mode=ant --batch_size=56 -r --ckpt_path=./checkpoints/vit_fip_f.pth
-python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46670 main.py --dataset=imagenet --model=vit_b_16 --mode=ant --batch_size=56 -r --ckpt_path=./checkpoints/vit_ant48.pth
+python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46670 main.py --dataset=imagenet --model=vit_b_16 --mode=int --batch_size=256 -r --ckpt_path=./checkpoints/vit_int.pth
+python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46670 main.py --dataset=imagenet --model=vit_b_16 --mode=ant --batch_size=256 -r --ckpt_path=./checkpoints/vit_ip.pth
+python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46670 main.py --dataset=imagenet --model=vit_b_16 --mode=ant --batch_size=256 -r --ckpt_path=./checkpoints/vit_fip.pth
+python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46670 main.py --dataset=imagenet --model=vit_b_16 --mode=ant --batch_size=256 -r --ckpt_path=./checkpoints/vit_ip_f.pth
+python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46670 main.py --dataset=imagenet --model=vit_b_16 --mode=ant --batch_size=256 -r --ckpt_path=./checkpoints/vit_fip_f.pth
+python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46670 main.py --dataset=imagenet --model=vit_b_16 --mode=ant --batch_size=256 -r --ckpt_path=./checkpoints/vit_ant48.pth
