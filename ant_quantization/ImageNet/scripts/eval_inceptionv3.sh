@@ -1,5 +1,5 @@
 python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46669 main.py --dataset=imagenet --model=inception_v3 --mode=int --batch_size=64 -r --ckpt_path=./checkpoints/inceptionv3_int.pth
-python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46669 main.py --dataset=imagenet --model=inception_v3 --mode=ant --abit=4 --wbit=4 --batch_size=64 -r --ckpt_path=./checkpoints/inceptionv3_ip.pth
+python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46669 main.py --dataset=imagenet --model=inception_v3 --mode=ant --batch_size=64 -r --ckpt_path=./checkpoints/inceptionv3_ip.pth
 python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46669 main.py --dataset=imagenet --model=inception_v3 --mode=ant --batch_size=64 -r --ckpt_path=./checkpoints/inceptionv3_fip.pth
 python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46669 main.py --dataset=imagenet --model=inception_v3 --mode=ant --batch_size=64 -r --ckpt_path=./checkpoints/inceptionv3_ip_f.pth
 python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46669 main.py --dataset=imagenet --model=inception_v3 --mode=ant --batch_size=64 -r --ckpt_path=./checkpoints/inceptionv3_fip_f.pth

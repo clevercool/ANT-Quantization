@@ -3,6 +3,8 @@
 
 Please prepare your dataset with [this script](https://github.com/pytorch/examples/blob/main/imagenet/extract_ILSVRC.sh) and set your dataset path using "--dataset_path /your/imagenet_path".
 
+You can also fill your ImageNet path into the default setting in [line 28](https://github.com/clevercool/ANT_Micro22/blob/main/ant_quantization/ImageNet/main.py#L28) of the `main.py`.
+
 ## Evaluation 
 
 ### Results of 6-bit quantization without fine-tuning (Table V).

@@ -1,5 +1,5 @@
 python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46668 main.py --dataset=imagenet --model=vgg16_bn --mode=int --batch_size=128 -r --ckpt_path=./checkpoints/vgg16_int.pth
-python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46668 main.py --dataset=imagenet --model=vgg16_bn --mode=ant --abit=4 --wbit=4 --batch_size=128 -r --ckpt_path=./checkpoints/vgg16_ip.pth
+python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46668 main.py --dataset=imagenet --model=vgg16_bn --mode=ant --batch_size=128 -r --ckpt_path=./checkpoints/vgg16_ip.pth
 python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46668 main.py --dataset=imagenet --model=vgg16_bn --mode=ant --batch_size=128 -r --ckpt_path=./checkpoints/vgg16_fip.pth
 python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46668 main.py --dataset=imagenet --model=vgg16_bn --mode=ant --batch_size=128 -r --ckpt_path=./checkpoints/vgg16_ip_f.pth
 python -u -m torch.distributed.launch --nproc_per_node=1 --master_port 46668 main.py --dataset=imagenet --model=vgg16_bn --mode=ant --batch_size=128 -r --ckpt_path=./checkpoints/vgg16_fip_f.pth

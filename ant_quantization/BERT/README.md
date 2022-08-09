@@ -38,3 +38,5 @@ The accuracy results are listed in the following table.
 | CoLA | 0.00  | 52.61 | 52.61 | 53.91 | 53.91 | 56.33  |
 | SST-2 | 79.93 | 92.20 | 92.20 | 92.43 | 92.43 | 92.43 |
 | MNLI | 54.46 | 83.04 |83.04 | 83.45 | 83.45 |83.72 |
+
+You can fill it in `../result/ANT-quantization.xlsx` to produce Figure 12 in the paper.
