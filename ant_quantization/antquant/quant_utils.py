@@ -52,6 +52,7 @@ def get_ckpt_path(args):
             os.mkdir(path)
     
     torch.cuda.synchronize()
+    torch.distributed.barrier()
 
     path = os.path.join(path, "gpu_" + str(torch.distributed.get_rank()))
     if not os.path.isdir(path):
