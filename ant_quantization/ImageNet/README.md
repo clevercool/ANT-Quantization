@@ -69,6 +69,9 @@ We have collected the checkpoints for the models. You can download them by runni
 # vit           - 3.97 GB
 ```
 You can run the following scripts to reproduce the results with fine-tuning (Figure 12) for CNNs (ResNet18, ResNet50, VGG16, InceptionV3) and ViT. The result may have a little random error (< 0.1%) due to the CUDA rounding implementation.
+
+If it occurs the error "RuntimeError: CUDA out of memory.", you can reduce the batch size.
+
 ```shell
 # run
 ./scripts/eval_resnet18.sh      # About 7 minutes
