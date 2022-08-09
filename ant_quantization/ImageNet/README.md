@@ -41,6 +41,9 @@ For ANT4-8, the log file will print the data type chosen result, and we can anal
 
 You can exploit the following scripts to fine-tune all models. We provide the approximate execution time for each script.
 
+
+You can find the log files in the directory `./log`.
+
 ```shell
 ./scripts/vgg16_qat.sh          # About 20 hours
 ./scripts/resnet18_qat.sh       # About 4  hours
