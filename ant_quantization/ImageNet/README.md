@@ -85,7 +85,12 @@ If it occurs the error "RuntimeError: CUDA out of memory.", you can reduce the b
 
 ```
 
-The accuracy results are listed in the following table. 
+The accuracy results are listed in the following table. You can use `./script/print_result.sh` to get this table.
+
+```shell
+./script/print_result.sh
+```
+
 | Network | Int  | IP | FIP | IP-F | FIP-F | ANT4-8 |
 | :----:| :----: | :----: | :----: | :----: | :----: | :----: |
 | VGG16 | 68.57% | 70.06% | 71.08% | 71.50% | 71.56% | 73.52% |
