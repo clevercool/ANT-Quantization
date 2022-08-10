@@ -17,7 +17,6 @@ $ conda create -n ant_sim python=3.8
 $ conda activate ant_sim  
 $ pip install -r  requirements.txt
 $ # Cacti for the memory simulation.
-$ cd ./ant_isca_dev/ant_simulator
 $ git clone https://github.com/HewlettPackard/cacti ./bitfusion/sram/cacti/
 $ make -C ./bitfusion/sram/cacti/
 $ # Run ANT simulation.
