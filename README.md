@@ -1,4 +1,5 @@
 # Artifact Evaluation for ANT [MICRO'22]
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7002115.svg)](https://doi.org/10.5281/zenodo.7002115)
 
 This repository contains the source code for reproducing the experiments in the paper "ANT: Exploiting Adaptive Numerical Data Type for Low-bit Deep Neural Network Quantization" at MICRO'22.
 
