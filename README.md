@@ -23,3 +23,6 @@ This repository contains the source code for reproducing the experiments in the 
 │   ├── results                             # Our test results.
 │   └── run_ant.py                          # The scripts are for reproducing the experiment data in Figure 13.
 ```
+
+## License
+Licensed under an Apache-2.0 license.
