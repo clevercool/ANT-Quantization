@@ -107,7 +107,7 @@ class CactiSweep(object):
             row_dict = index_dict.copy()
             row_dict.update(self._run_cacti(index_dict))
             row_dict["area_mm^2"] = float(row_dict["height_mm"]) * float(row_dict["width_mm"])
-            self._df = self._df.append(pandas.DataFrame([row_dict]), ignore_index=True)
+            self._df = pandas.concat([self._df, pandas.DataFrame([row_dict])], ignore_index=True)
             self.update_csv()
             return self.locate(index_dict)
         else:
