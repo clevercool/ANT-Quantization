@@ -246,7 +246,7 @@ class Quantizer(nn.Module):
             exp_value = -(exp_bit - 1)
             mant_bit = value_bit - exp_bit
             for j in range(int(2 ** mant_bit)):
-                v = 2 ** exp_value * (1 + 2 ** (-mant_bit) * j)
+                v = 2 ** (exp_value + exp_base) * (1 + 2 ** (-mant_bit) * j)
                 values.append(v)
                 if self.is_signed:
                     values.append(-v)
