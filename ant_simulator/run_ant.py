@@ -12,16 +12,16 @@ from bitfusion.src.optimizer.optimizer import optimize_for_order, get_stats_fast
 
 def df_to_stats(df):
     stats = Stats()
-    stats.total_cycles = float(df['Cycles'])
-    stats.mem_stall_cycles = float(df['Memory wait cycles'])
-    stats.reads['act'] = float(df['IBUF Read'])
-    stats.reads['out'] = float(df['OBUF Read'])
-    stats.reads['wgt'] = float(df['WBUF Read'])
-    stats.reads['dram'] = float(df['DRAM Read'])
-    stats.writes['act'] = float(df['IBUF Write'])
-    stats.writes['out'] = float(df['OBUF Write'])
-    stats.writes['wgt'] = float(df['WBUF Write'])
-    stats.writes['dram'] = float(df['DRAM Write'])
+    stats.total_cycles = float(df['Cycles'].iloc[0])
+    stats.mem_stall_cycles = float(df['Memory wait cycles'].iloc[0])
+    stats.reads['act'] = float(df['IBUF Read'].iloc[0])
+    stats.reads['out'] = float(df['OBUF Read'].iloc[0])
+    stats.reads['wgt'] = float(df['WBUF Read'].iloc[0])
+    stats.reads['dram'] = float(df['DRAM Read'].iloc[0])
+    stats.writes['act'] = float(df['IBUF Write'].iloc[0])
+    stats.writes['out'] = float(df['OBUF Write'].iloc[0])
+    stats.writes['wgt'] = float(df['WBUF Write'].iloc[0])
+    stats.writes['dram'] = float(df['DRAM Write'].iloc[0])
     return stats
 
 sim_sweep_columns = ['N', 'M',

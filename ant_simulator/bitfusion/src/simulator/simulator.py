@@ -129,10 +129,10 @@ class Simulator(object):
         ##################################################
         cfg_dict = {'size (bytes)': wbuf_bank_size /8., 'block size (bytes)': wbuf_bits/8., 'read-write port': 0}
         wbuf_data = self.sram_obj.get_data_clean(cfg_dict)
-        wbuf_read_energy = float(wbuf_data['read_energy_nJ']) / wbuf_bits
-        wbuf_write_energy = float(wbuf_data['write_energy_nJ']) / wbuf_bits
-        wbuf_leak_power = float(wbuf_data['leak_power_mW']) * wbuf_bank
-        wbuf_area = float(wbuf_data['area_mm^2']) * wbuf_bank
+        wbuf_read_energy = float(wbuf_data['read_energy_nJ'].iloc[0]) / wbuf_bits
+        wbuf_write_energy = float(wbuf_data['write_energy_nJ'].iloc[0]) / wbuf_bits
+        wbuf_leak_power = float(wbuf_data['leak_power_mW'].iloc[0]) * wbuf_bank
+        wbuf_area = float(wbuf_data['area_mm^2'].iloc[0]) * wbuf_bank
 
         self.logger.debug('WBUF :')
         self.logger.debug('\tBanks                       : {0:>8}'.format(wbuf_bank))
@@ -146,10 +146,10 @@ class Simulator(object):
         ##################################################
         cfg_dict = {'size (bytes)': ibuf_bank_size /8., 'block size (bytes)': ibuf_bits/8., 'read-write port': 0}
         ibuf_data = self.sram_obj.get_data_clean(cfg_dict)
-        ibuf_read_energy = float(ibuf_data['read_energy_nJ']) / ibuf_bits
-        ibuf_write_energy = float(ibuf_data['write_energy_nJ']) / ibuf_bits
-        ibuf_leak_power = float(ibuf_data['leak_power_mW']) * ibuf_bank
-        ibuf_area = float(ibuf_data['area_mm^2']) * ibuf_bank
+        ibuf_read_energy = float(ibuf_data['read_energy_nJ'].iloc[0]) / ibuf_bits
+        ibuf_write_energy = float(ibuf_data['write_energy_nJ'].iloc[0]) / ibuf_bits
+        ibuf_leak_power = float(ibuf_data['leak_power_mW'].iloc[0]) * ibuf_bank
+        ibuf_area = float(ibuf_data['area_mm^2'].iloc[0]) * ibuf_bank
 
         self.logger.debug('IBUF :')
         self.logger.debug('\tBanks                       : {0:>8}'.format(ibuf_bank))
@@ -163,10 +163,10 @@ class Simulator(object):
         ##################################################
         cfg_dict = {'size (bytes)': obuf_bank_size /8., 'block size (bytes)': obuf_bits/8., 'read-write port': 1}
         obuf_data = self.sram_obj.get_data_clean(cfg_dict)
-        obuf_read_energy = float(obuf_data['read_energy_nJ']) / obuf_bits
-        obuf_write_energy = float(obuf_data['write_energy_nJ']) / obuf_bits
-        obuf_leak_power = float(obuf_data['leak_power_mW']) * obuf_bank
-        obuf_area = float(obuf_data['area_mm^2']) * obuf_bank
+        obuf_read_energy = float(obuf_data['read_energy_nJ'].iloc[0]) / obuf_bits
+        obuf_write_energy = float(obuf_data['write_energy_nJ'].iloc[0]) / obuf_bits
+        obuf_leak_power = float(obuf_data['leak_power_mW'].iloc[0]) * obuf_bank
+        obuf_area = float(obuf_data['area_mm^2'].iloc[0]) * obuf_bank
 
         self.logger.debug('OBUF :')
         self.logger.debug('\tBanks                       : {0:>8}'.format(obuf_bank))
@@ -193,17 +193,17 @@ class Simulator(object):
             lookup_dict['M'] = 1
             core_data = lookup_pandas_dataframe(core_synth_data, lookup_dict)
             assert len(core_data) == 1
-            core_area = float(core_data['Area (um^2)']) * 1.e-6 * (N * M) / 1.
-            core_dyn_power = float(core_data['Dynamic Power (nW)']) * (N * M) / 1.
-            core_dyn_energy = core_dyn_power / float(core_data['Frequency'])
-            core_leak_power = float(core_data['Leakage Power (nW)']) * (N * M) / 1.
-            core_leak_energy = core_leak_power / float(core_data['Frequency'])
+            core_area = float(core_data['Area (um^2)'].iloc[0]) * 1.e-6 * (N * M) / 1.
+            core_dyn_power = float(core_data['Dynamic Power (nW)'].iloc[0]) * (N * M) / 1.
+            core_dyn_energy = core_dyn_power / float(core_data['Frequency'].iloc[0])
+            core_leak_power = float(core_data['Leakage Power (nW)'].iloc[0]) * (N * M) / 1.
+            core_leak_energy = core_leak_power / float(core_data['Frequency'].iloc[0])
         else:
-            core_area = float(core_data['Area (um^2)']) * 1.e-6
-            core_dyn_power = float(core_data['Dynamic Power (nW)'])
-            core_dyn_energy = core_dyn_power / float(core_data['Frequency'])
-            core_leak_power = float(core_data['Leakage Power (nW)'])
-            core_leak_energy = core_leak_power / float(core_data['Frequency'])
+            core_area = float(core_data['Area (um^2)'].iloc[0]) * 1.e-6
+            core_dyn_power = float(core_data['Dynamic Power (nW)'].iloc[0])
+            core_dyn_energy = core_dyn_power / float(core_data['Frequency'].iloc[0])
+            core_leak_power = float(core_data['Leakage Power (nW)'].iloc[0])
+            core_leak_energy = core_leak_power / float(core_data['Frequency'].iloc[0])
         self.logger.debug('Core :')
         self.logger.debug('\tDimensions              : {0}x{1}-systolic array'.format(N, M))
         self.logger.debug('\tMax-Precision           : {}'.format(pmax))
@@ -253,10 +253,10 @@ class Simulator(object):
         cfg_dict = {'size (bytes)': wbuf_bank_size /8., 'block size (bytes)': wbuf_bits/8., 'read-write port': 0}
         
         wbuf_data = self.sram_obj.get_data_clean(cfg_dict)
-        wbuf_read_energy = float(wbuf_data['read_energy_nJ']) / wbuf_bits
-        wbuf_write_energy = float(wbuf_data['write_energy_nJ']) / wbuf_bits
-        wbuf_leak_power = float(wbuf_data['leak_power_mW']) * wbuf_bank
-        wbuf_area = float(wbuf_data['area_mm^2']) * wbuf_bank
+        wbuf_read_energy = float(wbuf_data['read_energy_nJ'].iloc[0]) / wbuf_bits
+        wbuf_write_energy = float(wbuf_data['write_energy_nJ'].iloc[0]) / wbuf_bits
+        wbuf_leak_power = float(wbuf_data['leak_power_mW'].iloc[0]) * wbuf_bank
+        wbuf_area = float(wbuf_data['area_mm^2'].iloc[0]) * wbuf_bank
 
         self.logger.debug('WBUF :')
         self.logger.debug('\tBanks                       : {0:>8}'.format(wbuf_bank))
@@ -270,10 +270,10 @@ class Simulator(object):
         ##################################################
         cfg_dict = {'size (bytes)': ibuf_bank_size /8., 'block size (bytes)': ibuf_bits/8., 'read-write port': 0}
         ibuf_data = self.sram_obj.get_data_clean(cfg_dict)
-        ibuf_read_energy = float(ibuf_data['read_energy_nJ']) / ibuf_bits
-        ibuf_write_energy = float(ibuf_data['write_energy_nJ']) / ibuf_bits
-        ibuf_leak_power = float(ibuf_data['leak_power_mW']) * ibuf_bank
-        ibuf_area = float(ibuf_data['area_mm^2']) * ibuf_bank
+        ibuf_read_energy = float(ibuf_data['read_energy_nJ'].iloc[0]) / ibuf_bits
+        ibuf_write_energy = float(ibuf_data['write_energy_nJ'].iloc[0]) / ibuf_bits
+        ibuf_leak_power = float(ibuf_data['leak_power_mW'].iloc[0]) * ibuf_bank
+        ibuf_area = float(ibuf_data['area_mm^2'].iloc[0]) * ibuf_bank
 
         self.logger.debug('IBUF :')
         self.logger.debug('\tBanks                       : {0:>8}'.format(ibuf_bank))
@@ -287,10 +287,10 @@ class Simulator(object):
         ##################################################
         cfg_dict = {'size (bytes)': obuf_bank_size /8., 'block size (bytes)': obuf_bits/8., 'read-write port': 1}
         obuf_data = self.sram_obj.get_data_clean(cfg_dict)
-        obuf_read_energy = float(obuf_data['read_energy_nJ']) / obuf_bits
-        obuf_write_energy = float(obuf_data['write_energy_nJ']) / obuf_bits
-        obuf_leak_power = float(obuf_data['leak_power_mW']) * obuf_bank
-        obuf_area = float(obuf_data['area_mm^2']) * obuf_bank
+        obuf_read_energy = float(obuf_data['read_energy_nJ'].iloc[0]) / obuf_bits
+        obuf_write_energy = float(obuf_data['write_energy_nJ'].iloc[0]) / obuf_bits
+        obuf_leak_power = float(obuf_data['leak_power_mW'].iloc[0]) * obuf_bank
+        obuf_area = float(obuf_data['area_mm^2'].iloc[0]) * obuf_bank
 
         self.logger.debug('OBUF :')
         self.logger.debug('\tBanks                       : {0:>8}'.format(obuf_bank))
@@ -317,17 +317,17 @@ class Simulator(object):
             lookup_dict['M'] = 1
             core_data = lookup_pandas_dataframe(core_synth_data, lookup_dict)
             assert len(core_data) == 1
-            core_area = float(core_data['Area (um^2)']) * 1.e-6 * (N * M) / 1.
-            core_dyn_power = float(core_data['Dynamic Power (nW)']) * (N * M) / 1.
-            core_dyn_energy = core_dyn_power / float(core_data['Frequency'])
-            core_leak_power = float(core_data['Leakage Power (nW)']) * (N * M) / 1.
-            core_leak_energy = core_leak_power / float(core_data['Frequency'])
+            core_area = float(core_data['Area (um^2)'].iloc[0]) * 1.e-6 * (N * M) / 1.
+            core_dyn_power = float(core_data['Dynamic Power (nW)'].iloc[0]) * (N * M) / 1.
+            core_dyn_energy = core_dyn_power / float(core_data['Frequency'].iloc[0])
+            core_leak_power = float(core_data['Leakage Power (nW)'].iloc[0]) * (N * M) / 1.
+            core_leak_energy = core_leak_power / float(core_data['Frequency'].iloc[0])
         else:
-            core_area = float(core_data['Area (um^2)']) * 1.e-6
-            core_dyn_power = float(core_data['Dynamic Power (nW)'])
-            core_dyn_energy = core_dyn_power / float(core_data['Frequency'])
-            core_leak_power = float(core_data['Leakage Power (nW)'])
-            core_leak_energy = core_leak_power / float(core_data['Frequency'])
+            core_area = float(core_data['Area (um^2)'].iloc[0]) * 1.e-6
+            core_dyn_power = float(core_data['Dynamic Power (nW)'].iloc[0])
+            core_dyn_energy = core_dyn_power / float(core_data['Frequency'].iloc[0])
+            core_leak_power = float(core_data['Leakage Power (nW)'].iloc[0])
+            core_leak_energy = core_leak_power / float(core_data['Frequency'].iloc[0])
         self.logger.debug('Core :')
         self.logger.debug('\tDimensions              : {0}x{1}-systolic array'.format(N, M))
         self.logger.debug('\tMax-Precision           : {}'.format(pmax))
@@ -337,7 +337,7 @@ class Simulator(object):
         self.logger.debug('\tArea (mm^2)             : {}'.format(core_area))
         ##################################################
 
-        sram_leak_energy = (wbuf_leak_power + ibuf_leak_power + obuf_leak_power) * 1e6 / float(core_data['Frequency'])
+        sram_leak_energy = (wbuf_leak_power + ibuf_leak_power + obuf_leak_power) * 1e6 / float(core_data['Frequency'].iloc[0])
         energy_tuple = EnergyTuple(core_leak_energy, core_dyn_energy, wbuf_read_energy, wbuf_write_energy, ibuf_read_energy, ibuf_write_energy, obuf_read_energy, obuf_write_energy, sram_leak_energy)
 
         return energy_tuple
