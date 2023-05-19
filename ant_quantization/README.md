@@ -1,37 +1,28 @@
-# ANT Quantization
-We evaluate the results with models in image classification and NLP. 
-## Paper's Hardware Configuration
-
-+ Intel(R) Xeon(R) Platinum 8358 CPU @ 2.60GHz
-+ NVIDIA A100 GPU (40GB)
-+ 4 * NVIDIA A10 GPUs (24GB)
-
+# OliVe Quantization
 ## Environment
 ```
-# PyTorch 1.11
-conda create -n ant_quant python=3.8 
-conda activate ant_quant
-conda install  pytorch=1.11.0 torchvision torchaudio cudatoolkit=11.3 -c pytorch
-# Quantization CUDA kernel
+conda create -n OliVe python=3.8
+conda activate OliVe
+
+conda install pytorch=1.11.0 torchvision==0.12.0 torchaudio==0.11.0 cudatoolkit=11.3 -c pytorch
+pip install -r requirements.txt
+
 pip install ./quant
-
-#ImageNet
-pip install --extra-index-url https://developer.download.nvidia.com/compute/redist nvidia-dali-cuda110
-
-#BERT
-pip install -r BERT/requirements.txt
 ```
 
+## Paper's Hardware Configuration
 
-## ImageNet
-The image classification tasks include five models, i.e., VGG16, ResNet18, ResNet50, Inception-V3, and ViT. 
++ AMD EPYC 7302 16-Core Processor
++ NVIDIA A40 GPU (48GB)
 
-For reproducing the results in Table V and Figure 12, please refer to `./ImageNet`.
+## BERT / BART
 
-## BERT
-We adopt the BERT model for the NLP task with three datasets, MNLI, CoLA, and SST-2. 
+We adopt the BERT and BART models for the NLP task with five datasets, MNLI, CoLA, SST-2, QQP and MRPC.
 
-For reproducing the results in Figure 12, please refer to `./BERT`.
+For reproducing the results in the paper, please refer to `./bert`.
 
-## Results
-The file `./result/ANT-quantization.xlsx` contains the results and template for Figure 12.
+## Large Language Models
+
+We adopt the GPT-2, OPT and Bloom models for the NLP task with two datasets, wikitext and C4.
+
+For reproducing the results in the paper, please refer to `./llm`.

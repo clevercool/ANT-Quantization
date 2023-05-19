@@ -1,42 +1,20 @@
-# Artifact Evaluation for ANT [MICRO'22]
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7002115.svg)](https://doi.org/10.5281/zenodo.7002115)
+# OliVe: Accelerating Large Language Models via Hardware-friendly Outlier-Victim Pair Quantization [[paper](https://arxiv.org/abs/2304.07493)]
 
-## Publication
-If you use ANT in your research, please cite our paper:
+![](figures/intro_victor.png)
+
+## Abstract
+
+Transformer-based large language models (LLMs) have achieved great success with the growing model size. LLMs’ size grows by 240× every two years, which outpaces the hardware progress and makes model inference increasingly costly. Model quantization is a promising approach to mitigate the widening gap between LLM size and hardware capacity. However, the existence of outliers, values with significant magnitudes, in LLMs makes existing quantization methods less effective. Prior outlier-aware quantization schemes adopt sparsity encoding techniques to separate outliers from nor- mal values where the process requires global coordination (e.g., a global sparsity coordination list). This incurs complex encod- ing/decoding hardware logics and an extra orchestration controller for the computation between outlier and normal values. As such, it is not hardware-efficient and hence only achieves sub-optimal quantization benefits.
+
+We propose OliVe, an algorithm/architecture co-designed so- lution that adopts an outlier-victim pair (OVP) quantization and handles outlier values locally with low hardware overheads and high performance gains. The key insight of OliVe is that outliers are important while the normal values next to them are not. Thus those normal values (called victims) can be sacrificed to accommodate outliers. This enables a memory-aligned OVP encoding scheme, which can be efficiently integrated to the existing hardware accel- erators like systolic array and tensor core. As a result, OliVe-based accelerator surpasses the existing outlier-aware accelerator, GOBO, by 4.5× speedup and 4.0× energy reduction, respectively, with a superior model accuracy.
+
+## Citation
 ```
-@inproceedings{guo2022ant,
-  title={ANT: Exploiting Adaptive Numerical Data Type for Low-bit Deep Neural Network Quantization},
-  author={Guo, Cong and Zhang, Chen and Leng, Jingwen and Liu, Zihan and Yang, Fan and Liu, Yunxin and Guo, Minyi and Zhu, Yuhao},
-  booktitle={2022 55th IEEE/ACM International Symposium on Microarchitecture (MICRO)},
-  pages={1414--1433},
-  year={2022},
-  organization={IEEE}
+@article{guo2023olive,
+    author = {Guo, Cong and Tang, Jiaming and Hu, Weiming and Leng, Jingwen and Zhang, Chen and Yang, Fan and Liu, Yunxin and Guo, Minyi and Zhu, Yuhao},
+    title = {OliVe: Accelerating Large Language Models via Hardware-friendly Outlier-Victim Pair Quantization},
+    year = {2023},
+    eprint = {arXiv:2304.07493},
+    doi = {10.1145/3579371.3589038},
 }
 ```
-
-
-This repository contains the source code for reproducing the experiments in the paper "ANT: Exploiting Adaptive Numerical Data Type for Low-bit Deep Neural Network Quantization" at MICRO'22.
-
-`ant_quantization` contains the ANT framework with PyTorch.
-
-`ant_simulator` contains the performance and energy evaluation of ANT. 
-
-## Project Structure
-
-```
-├── ant_quantization                        # The ANT framework with PyTorch.
-│   ├── antquant                            # Quantization framework of ANT.
-│   ├── BERT
-│   │   ├── download_glue_data.py           # Download for GLUE data.
-│   │   └── scripts                         # Reproduce the experiment data in Figure 12.
-│   ├── ImageNet
-│   │   └── scripts                         # Download checkpoints and reproduce the experimental data in Figure 12.
-│   ├── quant                               # Quantization CUDA kernel.
-│   └── result                              # Our test results.
-├── ant_simulator                           # The performance and energy evaluation of ANT.
-│   ├── results                             # Our test results.
-│   └── run_ant.py                          # The scripts are for reproducing the experiment data in Figure 13.
-```
-
-## License
-Licensed under an Apache-2.0 license.

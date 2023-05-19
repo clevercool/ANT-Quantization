@@ -2,10 +2,11 @@ import torch
 import torch.nn as nn
 import numpy as np
 import copy
-from quant_modules import TensorQuantizer, Conv2dQuantizer, LinearQuantizer
-from multihead_attention import MultiheadAttentionQuantizer
+from quant_modules import TensorQuantizer, Conv2dQuantizer, LinearQuantizer, Conv1dQuantizer
+
 from quant_utils import quant_args
 import torch.distributed as dist
+from transformers import pytorch_utils
 
 
 def quantize_model(model):
@@ -22,8 +23,8 @@ def quantize_model(model):
         quant_mod = LinearQuantizer(**quant_args)
         quant_mod.set_param(model)
         return quant_mod
-    elif type(model) == nn.MultiheadAttention:
-        quant_mod = MultiheadAttentionQuantizer(**quant_args)
+    elif type(model) == pytorch_utils.Conv1D:
+        quant_mod = Conv1dQuantizer(**quant_args)
         quant_mod.set_param(model)
         return quant_mod
     elif type(model) == nn.Sequential:
@@ -46,7 +47,7 @@ def quantize_model(model):
         q_model = copy.deepcopy(model)
         for attr in dir(model):
             mod = getattr(model, attr)
-            if isinstance(mod, nn.Module):
+            if isinstance(mod, nn.Module) and attr != 'base_model' and attr!= 'lm_head':
                 setattr(q_model, attr, quantize_model(mod))
         return q_model
 
@@ -101,29 +102,23 @@ def set_8_bit_layer_n(model, l_num):
             mse += m.mse.item()
             m.has_inited_quant_para.data = torch.zeros_like(m.has_inited_quant_para)  
 
-    if dist.get_rank() == 0:
-        print("------------- 8-bit Re-SET -------------")
-        print(l_num)
+    print("------------- 8-bit Re-SET -------------")
+    print(l_num)
     assert l_num > 0
     l_num *= 2
 
     first_num = 0 * 2
     for i in range(0, first_num):
-        if dist.get_rank() == 0:
-            print(module_list[i].name)
+        print(module_list[i].name)
         module_list[i].bit.data = torch.tensor(8, device=module_list[i].bit.device)
 
     # For BERT last n layers.
     last_num = 2 * 2
     for i in range(len(mse_list) - last_num, len(mse_list)):
-        if dist.get_rank() == 0:
-            print(module_list[i].name)
+        print(module_list[i].name)
         module_list[i].bit.data = torch.tensor(8, device=module_list[i].bit.device)
 
-    if dist.get_rank() == 0:
-        print("------------- First and Last end -------------")
-
-
+    print("------------- First and Last end -------------")
     module_list = module_list[first_num: len(mse_list) - last_num]
     mse_list = mse_list[first_num: len(mse_list) - last_num]
 
@@ -139,14 +134,12 @@ def set_8_bit_layer_n(model, l_num):
 
     if l_num > 0:
         for i in mse_idx[0:l_num]:
-            if dist.get_rank() == 0:
-                print(module_list[i * 2].name, mses[i], i )
-                print(module_list[i * 2 + 1].name, mses[i], i)
+            print(module_list[i * 2].name, mses[i], i )
+            print(module_list[i * 2 + 1].name, mses[i], i)
             module_list[i*2].bit.data = torch.tensor(8, device=module_list[i*2].bit.device)
             module_list[i*2+1].bit.data = torch.tensor(8, device=module_list[i*2+1].bit.device)
 
-    if dist.get_rank() == 0:
-        print("------------- 8-bit Re-SET -------------")
+    print("------------- 8-bit Re-SET -------------")
 
 def load_ant_state_dict(model, checkpoint):
     for name, module in model.named_modules():

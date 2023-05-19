@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HugginFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,140 +12,185 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""BERT finetuning runner."""
-
-from __future__ import absolute_import, division, print_function
-
-import pickle
+""" Finetuning a 🤗 Transformers model for sequence classification on GLUE."""
 import argparse
+import json
 import logging
+import math
 import os
 import random
-import json
-import time
-import sys
+from pathlib import Path
 
-import numpy as np
+import datasets
 import torch
-from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
-                              TensorDataset)
-from torch.utils.data.distributed import DistributedSampler
+from datasets import load_dataset
+from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
 
-import modeling
-from tokenization import BertTokenizer
-from optimization import BertAdam, warmup_linear
-from schedulers import LinearWarmUpScheduler
-from sklearn.metrics import matthews_corrcoef, f1_score
-from utils import (is_main_process, mkdir_by_main_process, format_step,
-                   get_world_size)
-from processors.glue import PROCESSORS, convert_examples_to_features
+import evaluate
+import transformers
+from accelerate import Accelerator
+from accelerate.logging import get_logger
+from accelerate.utils import set_seed
+from huggingface_hub import Repository
+from transformers import (
+    AutoConfig,
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    DataCollatorWithPadding,
+    PretrainedConfig,
+    SchedulerType,
+    default_data_collator,
+    get_scheduler,
+)
+from transformers.utils import check_min_version, get_full_repo_name, send_example_telemetry
+from transformers.utils.versions import require_version
 
 import sys
 sys.path.append("../antquant")
 from quant_model import *
 from quant_utils import *
 
-torch._C._jit_set_profiling_mode(False)
-torch._C._jit_set_profiling_executor(False)
+# Will error if the minimal version of Transformers is not installed. Remove at your own risks.
+check_min_version("4.25.0.dev0")
 
-def compute_metrics(task_name, preds, labels):
-    assert len(preds) == len(labels)
-    if task_name == "cola":
-        return {"mcc": matthews_corrcoef(labels, preds)}
-    elif task_name == "sst-2":
-        return {"acc": simple_accuracy(preds, labels)}
-    elif task_name == "mrpc":
-        return acc_and_f1(preds, labels)
-    elif task_name == "sts-b":
-        return pearson_and_spearman(preds, labels)
-    elif task_name == "qqp":
-        return acc_and_f1(preds, labels)
-    elif task_name == "mnli":
-        return {"acc": simple_accuracy(preds, labels)}
-    elif task_name == "mnli-mm":
-        return {"acc": simple_accuracy(preds, labels)}
-    elif task_name == "qnli":
-        return {"acc": simple_accuracy(preds, labels)}
-    elif task_name == "rte":
-        return {"acc": simple_accuracy(preds, labels)}
-    elif task_name == "wnli":
-        return {"acc": simple_accuracy(preds, labels)}
-    else:
-        raise KeyError(task_name)
+logger = get_logger(__name__)
+
+require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
+
+task_to_keys = {
+    "cola": ("sentence", None),
+    "mnli": ("premise", "hypothesis"),
+    "mrpc": ("sentence1", "sentence2"),
+    "qnli": ("question", "sentence"),
+    "qqp": ("question1", "question2"),
+    "rte": ("sentence1", "sentence2"),
+    "sst2": ("sentence", None),
+    "stsb": ("sentence1", "sentence2"),
+    "wnli": ("sentence1", "sentence2"),
+}
 
 
-def simple_accuracy(preds, labels):
-    return (preds == labels).mean()
-
-
-def acc_and_f1(preds, labels):
-    acc = simple_accuracy(preds, labels)
-    f1 = f1_score(y_true=labels, y_pred=preds)
-    return {
-        "acc": acc,
-        "f1": f1,
-        "acc_and_f1": (acc + f1) / 2,
-    }
-
-
-def accuracy(out, labels):
-    outputs = np.argmax(out, axis=1)
-    return np.sum(outputs == labels)
-
-
-def parse_args(parser=argparse.ArgumentParser()):
-    ## Required parameters
-    parser.add_argument(
-        "--data_dir",
-        default=None,
-        type=str,
-        required=True,
-        help="The input data dir. Should contain the .tsv files (or other data "
-        "files) for the task.",
-    )
-    parser.add_argument(
-        "--bert_model",
-        default=None,
-        type=str,
-        required=True,
-        help="Bert pre-trained model selected in the list: bert-base-uncased, "
-        "bert-large-uncased, bert-base-cased, bert-large-cased, "
-        "bert-base-multilingual-uncased, bert-base-multilingual-cased, "
-        "bert-base-chinese.",
-    )
+def parse_args():
+    parser = argparse.ArgumentParser(description="Finetune a transformers model on a text classification task")
     parser.add_argument(
         "--task_name",
-        default=None,
-        type=str.lower,
-        required=True,
-        choices=PROCESSORS.keys(),
-        help="The name of the task to train.",
-    )
-    parser.add_argument(
-        "--output_dir",
-        default=None,
         type=str,
-        required=True,
-        help="The output directory where the model predictions and checkpoints "
-        "will be written.",
-    )
-    parser.add_argument(
-        "--init_checkpoint",
         default=None,
-        type=str,
-        required=True,
-        help="The checkpoint file from pretraining",
+        help="The name of the glue task to train on.",
+        choices=list(task_to_keys.keys()),
     )
-
-    ## Other parameters
     parser.add_argument(
-        "--max_seq_length",
-        default=128,
+        "--train_file", type=str, default=None, help="A csv or a json file containing the training data."
+    )
+    parser.add_argument(
+        "--validation_file", type=str, default=None, help="A csv or a json file containing the validation data."
+    )
+    parser.add_argument(
+        "--max_length",
         type=int,
-        help="The maximum total input sequence length after WordPiece "
-        "tokenization. \n"
-        "Sequences longer than this will be truncated, and sequences shorter \n"
-        "than this will be padded.",
+        default=128,
+        help=(
+            "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
+            " sequences shorter will be padded if `--pad_to_max_lengh` is passed."
+        ),
+    )
+    parser.add_argument(
+        "--pad_to_max_length",
+        action="store_true",
+        help="If passed, pad all samples to `max_length`. Otherwise, dynamic padding is used.",
+    )
+    parser.add_argument(
+        "--model_name_or_path",
+        type=str,
+        help="Path to pretrained model or model identifier from huggingface.co/models.",
+        required=True,
+    )
+    parser.add_argument(
+        "--use_slow_tokenizer",
+        action="store_true",
+        help="If passed, will use a slow tokenizer (not backed by the 🤗 Tokenizers library).",
+    )
+    parser.add_argument(
+        "--per_device_train_batch_size",
+        type=int,
+        default=8,
+        help="Batch size (per device) for the training dataloader.",
+    )
+    parser.add_argument(
+        "--per_device_eval_batch_size",
+        type=int,
+        default=8,
+        help="Batch size (per device) for the evaluation dataloader.",
+    )
+    parser.add_argument(
+        "--learning_rate",
+        type=float,
+        default=5e-5,
+        help="Initial learning rate (after the potential warmup period) to use.",
+    )
+    parser.add_argument("--weight_decay", type=float, default=0.0, help="Weight decay to use.")
+    parser.add_argument("--num_train_epochs", type=int, default=3, help="Total number of training epochs to perform.")
+    parser.add_argument(
+        "--max_train_steps",
+        type=int,
+        default=None,
+        help="Total number of training steps to perform. If provided, overrides num_train_epochs.",
+    )
+    parser.add_argument(
+        "--gradient_accumulation_steps",
+        type=int,
+        default=1,
+        help="Number of updates steps to accumulate before performing a backward/update pass.",
+    )
+    parser.add_argument(
+        "--lr_scheduler_type",
+        type=SchedulerType,
+        default="linear",
+        help="The scheduler type to use.",
+        choices=["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"],
+    )
+    parser.add_argument(
+        "--num_warmup_steps", type=int, default=0, help="Number of steps for the warmup in the lr scheduler."
+    )
+    parser.add_argument("--output_dir", type=str, default=None, help="Where to store the final model.")
+    parser.add_argument("--seed", type=int, default=18, help="A seed for reproducible training.")
+    parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
+    parser.add_argument(
+        "--hub_model_id", type=str, help="The name of the repository to keep in sync with the local `output_dir`."
+    )
+    parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
+    parser.add_argument(
+        "--checkpointing_steps",
+        type=str,
+        default=None,
+        help="Whether the various states should be saved at the end of every n steps, or 'epoch' for each epoch.",
+    )
+    parser.add_argument(
+        "--resume_from_checkpoint",
+        type=str,
+        default=None,
+        help="If the training should continue from a checkpoint folder.",
+    )
+    parser.add_argument(
+        "--with_tracking",
+        action="store_true",
+        help="Whether to enable experiment trackers for logging.",
+    )
+    parser.add_argument(
+        "--report_to",
+        type=str,
+        default="all",
+        help=(
+            'The integration to report the results and logs to. Supported platforms are `"tensorboard"`,'
+            ' `"wandb"` and `"comet_ml"`. Use `"all"` (default) to report to all integrations.'
+            "Only applicable when `--with_tracking` is passed."
+        ),
+    )
+    parser.add_argument(
+        "--ignore_mismatched_sizes",
+        action="store_true",
+        help="Whether or not to enable to load a pretrained model whose head dimensions are different.",
     )
     parser.add_argument("--do_train",
                         action='store_true',
@@ -155,102 +199,9 @@ def parse_args(parser=argparse.ArgumentParser()):
                         action='store_true',
                         help="Whether to get model-task performance on the dev"
                         "set by running eval.")
-    parser.add_argument("--do_find",
-                        action='store_true')
-    parser.add_argument("--do_predict",
-                        action='store_true',
-                        help="Whether to output prediction results on the dev ")
-    parser.add_argument("--do_lower_case",
-                        action='store_true',
-                        help="Set this flag if you are using an uncased model.")
-    parser.add_argument("--train_batch_size",
-                        default=32,
-                        type=int,
-                        help="Batch size per GPU for training.")
-    parser.add_argument("--eval_batch_size",
-                        default=8,
-                        type=int,
-                        help="Batch size per GPU for eval.")
-    parser.add_argument("--learning_rate",
-                        default=5e-5,
-                        type=float,
-                        help="The initial learning rate for Adam.")
-    parser.add_argument("--num_train_epochs",
-                        default=3,
-                        type=int,
-                        help="Total number of training epochs to perform.")
-    parser.add_argument("--max_steps",
-                        default=-1.0,
-                        type=float,
-                        help="Total number of training steps to perform.")
-    parser.add_argument(
-        "--warmup_proportion",
-        default=0.1,
-        type=float,
-        help="Proportion of training to perform linear learning rate warmup "
-        "for. E.g., 0.1 = 10%% of training.",
-    )
-    parser.add_argument("--no_cuda",
-                        action='store_true',
-                        help="Whether not to use CUDA when available")
-    parser.add_argument("--local_rank",
-                        type=int,
-                        default=-1,
-                        help="local_rank for distributed training on gpus")
-    parser.add_argument('--seed',
-                        type=int,
-                        default=1,
-                        help="random seed for initialization")
-    parser.add_argument(
-        '--gradient_accumulation_steps',
-        type=int,
-        default=1,
-        help="Number of updates steps to accumulate before performing a "
-        "backward/update pass.")
-    parser.add_argument(
-        '--fp16',
-        action='store_true',
-        help="Mixed precision training",
-    )
-    parser.add_argument(
-        '--amp',
-        action='store_true',
-        help="Mixed precision training",
-    )
-    parser.add_argument(
-        '--loss_scale',
-        type=float,
-        default=0,
-        help="Loss scaling to improve fp16 numeric stability. Only used when "
-        "fp16 set to True.\n"
-        "0 (default value): dynamic loss scaling.\n"
-        "Positive power of 2: static loss scaling value.\n",
-    )
-    parser.add_argument('--server_ip',
-                        type=str,
-                        default='',
-                        help="Can be used for distant debugging.")
-    parser.add_argument('--server_port',
-                        type=str,
-                        default='',
-                        help="Can be used for distant debugging.")
-    parser.add_argument('--vocab_file',
-                        type=str,
-                        default=None,
-                        required=True,
-                        help="Vocabulary mapping/file BERT was pretrainined on")
-    parser.add_argument("--config_file",
-                        default=None,
-                        type=str,
-                        required=True,
-                        help="The BERT model config")
-    parser.add_argument('--skip_checkpoint',
-                        default=False,
-                        action='store_true',
-                        help="Whether to save checkpoints")
 
     ## For quantization
-    parser.add_argument('--mode', default='source', type=str,
+    parser.add_argument('--mode', default='base', type=str,
                     help='quantizer mode')
     parser.add_argument('--wbit', '-wb', default='8', type=int, 
                         help='weight bit width')
@@ -278,515 +229,485 @@ def parse_args(parser=argparse.ArgumentParser()):
                         help='number of 8-bit layers')
     parser.add_argument('--layer_8bit_l', '-l8', default=None, type=str, 
                         help='list of 8-bit layers')
+    parser.add_argument(
+        "--quantize_batch_size",
+        type=int,
+        default=64,
+        help="Batch size (per device) for quantization.",
+    )
+    parser.add_argument(
+        "--no_outlier",
+        action="store_true"
+    )
+
     args = parser.parse_args()
 
-    return parser.parse_args()
-
-args = parse_args()
-# set logging
-set_util_logging(os.path.join(args.output_dir, "debug.log"))
-logging.basicConfig(
-    format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
-    datefmt='%m/%d/%Y %H:%M:%S',
-    level=logging.INFO,
-    handlers=[
-        logging.FileHandler(os.path.join(args.output_dir, "debug.log")),
-        logging.StreamHandler()
-    ]
-)
-
-logger = logging.getLogger(__name__)
-
-def init_optimizer_and_amp(model, learning_rate, loss_scale, warmup_proportion,
-                           num_train_optimization_steps, use_fp16):
-    param_optimizer = list(model.named_parameters())
-    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
-    optimizer_grouped_parameters = [
-        {
-            'params': [
-                p for n, p in param_optimizer
-                if not any(nd in n for nd in no_decay)
-            ],
-            'weight_decay': 0.01
-        },
-        {
-            'params': [
-                p for n, p in param_optimizer if any(nd in n for nd in no_decay)
-            ],
-            'weight_decay': 0.0
-        },
-    ]
-    optimizer, scheduler = None, None
-    logger.info("using fp32")
-    if num_train_optimization_steps is not None:
-        optimizer = BertAdam(
-            optimizer_grouped_parameters,
-            lr=learning_rate,
-            warmup=warmup_proportion,
-            t_total=num_train_optimization_steps,
-        )
-    return model, optimizer, scheduler
-
-
-def gen_tensor_dataset(features):
-    all_input_ids = torch.tensor(
-        [f.input_ids for f in features],
-        dtype=torch.long,
-    )
-    all_input_mask = torch.tensor(
-        [f.input_mask for f in features],
-        dtype=torch.long,
-    )
-    all_segment_ids = torch.tensor(
-        [f.segment_ids for f in features],
-        dtype=torch.long,
-    )
-    all_label_ids = torch.tensor(
-        [f.label_id for f in features],
-        dtype=torch.long,
-    )
-    return TensorDataset(
-        all_input_ids,
-        all_input_mask,
-        all_segment_ids,
-        all_label_ids,
-    )
-
-
-def get_train_features(data_dir, bert_model, max_seq_length, do_lower_case,
-                       local_rank, train_batch_size,
-                       gradient_accumulation_steps, num_train_epochs, tokenizer,
-                       processor):
-    cached_train_features_file = os.path.join(
-        data_dir,
-        '{0}_{1}_{2}'.format(
-            list(filter(None, bert_model.split('/'))).pop(),
-            str(max_seq_length),
-            str(do_lower_case),
-        ),
-    )
-    train_features = None
-    try:
-        with open(cached_train_features_file, "rb") as reader:
-            train_features = pickle.load(reader)
-        logger.info("Loaded pre-processed features from {}".format(
-            cached_train_features_file))
-    except:
-        logger.info("Did not find pre-processed features from {}".format(
-            cached_train_features_file))
-        train_examples = processor.get_train_examples(data_dir)
-        train_features, _ = convert_examples_to_features(
-            train_examples,
-            processor.get_labels(),
-            max_seq_length,
-            tokenizer,
-        )
-        if is_main_process():
-            logger.info("  Saving train features into cached file %s",
-                        cached_train_features_file)
-            with open(cached_train_features_file, "wb") as writer:
-                pickle.dump(train_features, writer)
-    return train_features
-
-
-def main(args):
-    logger.info(args)
-    ## Quantization setting
-    logger.info('==> Setting quantizer..')
-
-    args.fp16 = args.fp16 or args.amp
-    if args.server_ip and args.server_port:
-        # Distant debugging - see
-        # https://code.visualstudio.com/docs/python/debugging#_attach-to-a-local-script
-        import ptvsd
-        logger.info("Waiting for debugger attach")
-        ptvsd.enable_attach(
-            address=(args.server_ip, args.server_port),
-            redirect_output=True,
-        )
-        ptvsd.wait_for_attach()
-
-    if args.local_rank == -1 or args.no_cuda:
-        device = torch.device(
-            "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-        n_gpu = torch.cuda.device_count()
+    # Sanity checks
+    if args.task_name is None and args.train_file is None and args.validation_file is None:
+        raise ValueError("Need either a task name or a training/validation file.")
     else:
-        torch.cuda.set_device(args.local_rank)
-        device = torch.device("cuda", args.local_rank)
-        n_gpu = 1
-        # Initializes the distributed backend which will take care of
-        # sychronizing nodes/GPUs.
-        if not torch.distributed.is_initialized():
-            torch.distributed.init_process_group(backend='nccl')
-    logger.info("device: {} n_gpu: {}, distributed training: {}, "
-                "16-bits training: {}".format(
-                    device,
-                    n_gpu,
-                    bool(args.local_rank != -1),
-                    args.fp16,
-                ))
+        if args.train_file is not None:
+            extension = args.train_file.split(".")[-1]
+            assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+        if args.validation_file is not None:
+            extension = args.validation_file.split(".")[-1]
+            assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
 
-    if not args.do_train and not args.do_eval and not args.do_predict:
-        raise ValueError("At least one of `do_train`, `do_eval` or "
-                         "`do_predict` must be True.")
+    if args.push_to_hub:
+        assert args.output_dir is not None, "Need an `output_dir` to create a repo when `--push_to_hub` is passed."
 
-    if is_main_process():
-        if (os.path.exists(args.output_dir) and os.listdir(args.output_dir) and
-                args.do_train):
-            logger.warning("Output directory ({}) already exists and is not "
-                           "empty.".format(args.output_dir))
-    mkdir_by_main_process(args.output_dir)
+    return args
 
-    if args.gradient_accumulation_steps < 1:
-        raise ValueError("Invalid gradient_accumulation_steps parameter: {}, "
-                         "should be >= 1".format(
-                             args.gradient_accumulation_steps))
-    if args.gradient_accumulation_steps > args.train_batch_size:
-        raise ValueError("gradient_accumulation_steps ({}) cannot be larger "
-                         "train_batch_size ({}) - there cannot be a fraction "
-                         "of one sample.".format(
-                             args.gradient_accumulation_steps,
-                             args.train_batch_size,
-                         ))
-    args.train_batch_size = (args.train_batch_size //
-                             args.gradient_accumulation_steps)
 
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    if n_gpu > 0:
-        torch.cuda.manual_seed_all(args.seed)
+def main():
+    args = parse_args()
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_glue_no_trainer", args)
 
-    processor = PROCESSORS[args.task_name]()
-    num_labels = len(processor.get_labels())
-
-    tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
-    # tokenizer = BertTokenizer(
-    #     args.vocab_file,
-    #     do_lower_case=args.do_lower_case,
-    #     max_len=512,
-    # )  # for bert large
-
-    num_train_optimization_steps = None
-    # if args.do_train:
-    train_features = get_train_features(
-        args.data_dir,
-        args.bert_model,
-        args.max_seq_length,
-        args.do_lower_case,
-        args.local_rank,
-        args.train_batch_size,
-        args.gradient_accumulation_steps,
-        args.num_train_epochs,
-        tokenizer,
-        processor,
+    # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
+    # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
+    # in the environment
+    accelerator = (
+        Accelerator(log_with=args.report_to, logging_dir=args.output_dir) if args.with_tracking else Accelerator()
     )
-    num_train_optimization_steps = int(
-        len(train_features) / args.train_batch_size /
-        args.gradient_accumulation_steps) * args.num_train_epochs
-    if args.local_rank != -1:
-        num_train_optimization_steps = (num_train_optimization_steps //
-                                        torch.distributed.get_world_size())
-
-    # Prepare model
-    config = modeling.BertConfig.from_json_file(args.config_file)
-    # Padding for divisibility by 8
-    # if config.vocab_size % 8 != 0:
-    #     config.vocab_size += 8 - (config.vocab_size % 8)
-
-    modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu_training
-    # modeling.ACT2FN["bias_gelu"] = modeling.bias_gelu
-    model = modeling.BertForSequenceClassification(
-        config,
-        num_labels=num_labels,
+    # Make one log on every process with the configuration for debugging.
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        level=logging.INFO,
     )
-    logger.info("USING CHECKPOINT from {}".format(args.init_checkpoint))
-    state_dict = torch.load(args.init_checkpoint, map_location='cpu')['model']
-    # print(check.keys())
-    
-    # model.from_pretrained(args.init_checkpoint, strict=True)
+    logger.info(accelerator.state, main_process_only=False)
+    if accelerator.is_local_main_process:
+        datasets.utils.logging.set_verbosity_warning()
+        transformers.utils.logging.set_verbosity_info()
+    else:
+        datasets.utils.logging.set_verbosity_error()
+        transformers.utils.logging.set_verbosity_error()
 
-    old_keys = []
-    new_keys = []
-    for key in state_dict.keys():
-        new_key = None
-        if 'LayerNorm.gamma' in key:
-            new_key = key.replace('gamma', 'weight')
-        if 'LayerNorm.beta' in key:
-            new_key = key.replace('beta', 'bias')
-        if new_key:
-            old_keys.append(key)
-            new_keys.append(new_key)
-    for old_key, new_key in zip(old_keys, new_keys):
-        state_dict[new_key] = state_dict.pop(old_key)
+    # If passed along, set the training seed now.
+    if args.seed is not None:
+        set_seed(args.seed)
 
-    model.load_state_dict(
-        state_dict,
-        strict=False,
+    # Handle the repository creation
+    if accelerator.is_main_process:
+        if args.push_to_hub:
+            if args.hub_model_id is None:
+                repo_name = get_full_repo_name(Path(args.output_dir).name, token=args.hub_token)
+            else:
+                repo_name = args.hub_model_id
+            repo = Repository(args.output_dir, clone_from=repo_name)
+
+            with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
+                if "step_*" not in gitignore:
+                    gitignore.write("step_*\n")
+                if "epoch_*" not in gitignore:
+                    gitignore.write("epoch_*\n")
+        elif args.output_dir is not None:
+            os.makedirs(args.output_dir, exist_ok=True)
+    accelerator.wait_for_everyone()
+
+    # Get the datasets: you can either provide your own CSV/JSON training and evaluation files (see below)
+    # or specify a GLUE benchmark task (the dataset will be downloaded automatically from the datasets Hub).
+
+    # For CSV/JSON files, this script will use as labels the column called 'label' and as pair of sentences the
+    # sentences in columns called 'sentence1' and 'sentence2' if such column exists or the first two columns not named
+    # label if at least two columns are provided.
+
+    # If the CSVs/JSONs contain only one non-label column, the script does single sentence classification on this
+    # single column. You can easily tweak this behavior (see below)
+
+    # In distributed training, the load_dataset function guarantee that only one local process can concurrently
+    # download the dataset.
+    if args.task_name is not None:
+        # Downloading and loading a dataset from the hub.
+        raw_datasets = load_dataset("glue", args.task_name)
+    else:
+        # Loading the dataset from local csv or json file.
+        data_files = {}
+        if args.train_file is not None:
+            data_files["train"] = args.train_file
+        if args.validation_file is not None:
+            data_files["validation"] = args.validation_file
+        extension = (args.train_file if args.train_file is not None else args.validation_file).split(".")[-1]
+        raw_datasets = load_dataset(extension, data_files=data_files)
+    # See more about loading any type of standard or custom dataset at
+    # https://huggingface.co/docs/datasets/loading_datasets.html.
+
+    # Labels
+    if args.task_name is not None:
+        is_regression = args.task_name == "stsb"
+        if not is_regression:
+            label_list = raw_datasets["train"].features["label"].names
+            num_labels = len(label_list)
+        else:
+            num_labels = 1
+    else:
+        # Trying to have good defaults here, don't hesitate to tweak to your needs.
+        is_regression = raw_datasets["train"].features["label"].dtype in ["float32", "float64"]
+        if is_regression:
+            num_labels = 1
+        else:
+            # A useful fast method:
+            # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.unique
+            label_list = raw_datasets["train"].unique("label")
+            label_list.sort()  # Let's sort it for determinism
+            num_labels = len(label_list)
+
+    # Load pretrained model and tokenizer
+    #
+    # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
+    # download model & vocab.
+    config = AutoConfig.from_pretrained(args.model_name_or_path, num_labels=num_labels, finetuning_task=args.task_name)
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_fast=not args.use_slow_tokenizer)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        args.model_name_or_path,
+        from_tf=bool(".ckpt" in args.model_name_or_path),
+        config=config,
+        ignore_mismatched_sizes=args.ignore_mismatched_sizes,
     )
-    logger.info("USED CHECKPOINT from {}".format(args.init_checkpoint))
-    # set_percentile(model)
-
-    # for param_tensor in model.state_dict():
-    #     if "beta" not in param_tensor:
-    #         print(param_tensor, "\t", model.state_dict()[param_tensor].size())
-
-    #         print(model.state_dict()[param_tensor].requires_grad)
-
 
     # Set Quantizer
     set_quantizer(args)
     model = quantize_model(model)    
-    model.to(device)
-    if not args.disable_quant and args.mode != 'source':
+    # model.to(device)
+    if not args.disable_quant and args.mode != 'base':
         enable_quantization(model)
     else:
         disable_quantization(model)
     if args.disable_input_quantization:
         disable_input_quantization(model)
 
-    # Prepare optimizer
-    model, optimizer, scheduler = init_optimizer_and_amp(
-        model,
-        args.learning_rate,
-        args.loss_scale,
-        args.warmup_proportion,
-        num_train_optimization_steps,
-        args.fp16,
-    )
-    # if optimizer is not None:
-    #     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,  milestones = [1,2], gamma = 0.1, last_epoch=-1)
-        # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,  milestones = [100, 200, 300], gamma = 0.1, last_epoch=-1)
-
-    if args.local_rank != -1:
-        try:
-            from apex.parallel import DistributedDataParallel as DDP
-        except ImportError:
-            raise ImportError("Please install apex from "
-                              "https://www.github.com/nvidia/apex to use "
-                              "distributed and fp16 training.")
-        model = DDP(model)
-    elif n_gpu > 1:
-        model = torch.nn.DataParallel(model)
-
-    loss_fct = torch.nn.CrossEntropyLoss()
-    results = {}
-
-    if args.do_train:
-        logger.info("***** Running training *****")
-        logger.info("  Num examples = %d", len(train_features))
-        logger.info("  Batch size = %d", args.train_batch_size)
-        logger.info("  Num steps = %d", num_train_optimization_steps)
-        train_data = gen_tensor_dataset(train_features)
-        if args.local_rank == -1:
-            train_sampler = RandomSampler(train_data)
+    # Preprocessing the datasets
+    if args.task_name is not None:
+        sentence1_key, sentence2_key = task_to_keys[args.task_name]
+    else:
+        # Again, we try to have some nice defaults but don't hesitate to tweak to your use case.
+        non_label_column_names = [name for name in raw_datasets["train"].column_names if name != "label"]
+        if "sentence1" in non_label_column_names and "sentence2" in non_label_column_names:
+            sentence1_key, sentence2_key = "sentence1", "sentence2"
         else:
-            train_sampler = DistributedSampler(train_data)
-        train_dataloader = DataLoader(
-            train_data,
-            sampler=train_sampler,
-            batch_size=args.train_batch_size,
+            if len(non_label_column_names) >= 2:
+                sentence1_key, sentence2_key = non_label_column_names[:2]
+            else:
+                sentence1_key, sentence2_key = non_label_column_names[0], None
+
+    # Some models have set the order of the labels to use, so let's make sure we do use it.
+    label_to_id = None
+    if (
+        model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id
+        and args.task_name is not None
+        and not is_regression
+    ):
+        # Some have all caps in their config, some don't.
+        label_name_to_id = {k.lower(): v for k, v in model.config.label2id.items()}
+        if list(sorted(label_name_to_id.keys())) == list(sorted(label_list)):
+            logger.info(
+                f"The configuration of the model provided the following label correspondence: {label_name_to_id}. "
+                "Using it!"
+            )
+            label_to_id = {i: label_name_to_id[label_list[i]] for i in range(num_labels)}
+        else:
+            logger.warning(
+                "Your model seems to have been trained with labels, but they don't match the dataset: ",
+                f"model labels: {list(sorted(label_name_to_id.keys()))}, dataset labels: {list(sorted(label_list))}."
+                "\nIgnoring the model labels as a result.",
+            )
+    elif args.task_name is None and not is_regression:
+        label_to_id = {v: i for i, v in enumerate(label_list)}
+
+    if label_to_id is not None:
+        model.config.label2id = label_to_id
+        model.config.id2label = {id: label for label, id in config.label2id.items()}
+    elif args.task_name is not None and not is_regression:
+        model.config.label2id = {l: i for i, l in enumerate(label_list)}
+        model.config.id2label = {id: label for label, id in config.label2id.items()}
+
+    padding = "max_length" if args.pad_to_max_length else False
+
+    def preprocess_function(examples):
+        # Tokenize the texts
+        texts = (
+            (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
+        )
+        result = tokenizer(*texts, padding=padding, max_length=args.max_length, truncation=True)
+
+        if "label" in examples:
+            # if label_to_id is not None:
+            #     # Map labels to IDs (not necessary for GLUE tasks)
+            #     print(examples["label"])
+            #     result["labels"] = [label_to_id[l] for l in examples["label"]]
+            # else:
+            #     # In all cases, rename the column to labels because the model will expect that.
+            result["labels"] = examples["label"]
+        return result
+
+    with accelerator.main_process_first():
+        processed_datasets = raw_datasets.map(
+            preprocess_function,
+            batched=True,
+            remove_columns=raw_datasets["train"].column_names,
+            desc="Running tokenizer on dataset",
         )
 
-        global_step = 0
-        nb_tr_steps = 0
-        tr_loss = 0
-        latency_train = 0.0
-        nb_tr_examples = 0
-        model.train()
-        tic_train = time.perf_counter()
-        loss_a = []
-        for e in range(args.num_train_epochs):
-            model.train()
-            tr_loss, nb_tr_steps = 0, 0
-            for step, batch in enumerate(train_dataloader):
+    train_dataset = processed_datasets["train"]
+    eval_dataset = processed_datasets["validation_matched" if args.task_name == "mnli" else "validation"]
 
-                if step == 0 and e == 0  and args.layer_8bit_n != 0:
-                    batch = tuple(t.to(device) for t in batch)
-                    input_ids, input_mask, segment_ids, label_ids = batch
-                    model(input_ids, segment_ids, input_mask)
-                    set_8_bit_layer_n(model, args.layer_8bit_n)
-                if step == 0 and e == 0  and args.layer_8bit_l != None:
-                    batch = tuple(t.to(device) for t in batch)
-                    input_ids, input_mask, segment_ids, label_ids = batch
-                    model(input_ids, segment_ids, input_mask)
-                    set_8_bit_layer_l(model, args.layer_8bit_l)
-                
-                if args.max_steps > 0 and global_step > args.max_steps:
-                    break
-                batch = tuple(t.to(device) for t in batch)
-                input_ids, input_mask, segment_ids, label_ids = batch
-                logits = model(input_ids, segment_ids, input_mask)
-                loss = loss_fct(
-                    logits.view(-1, num_labels),
-                    label_ids.view(-1),
-                )
-                if n_gpu > 1:
-                    loss = loss.mean()  # mean() to average on multi-gpu.
-                if args.gradient_accumulation_steps > 1:
-                    loss = loss / args.gradient_accumulation_steps
-                
-                loss.backward()
+    # # Log a few random samples from the training set:
+    # for index in random.sample(range(len(train_dataset)), 3):
+    #     logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
 
-                preds = logits.detach().cpu().numpy()
-                preds = np.argmax(preds, axis=1)
-                out_label_ids = label_ids.detach().cpu().numpy()
-                train_result = compute_metrics(args.task_name, preds, out_label_ids)
+    # DataLoaders creation:
+    if args.pad_to_max_length:
+        # If padding was already done ot max length, we use the default data collator that will just convert everything
+        # to tensors.
+        data_collator = default_data_collator
+    else:
+        # Otherwise, `DataCollatorWithPadding` will apply dynamic padding for us (by padding to the maximum length of
+        # the samples passed). When using mixed precision, we add `pad_to_multiple_of=8` to pad all tensors to multiple
+        # of 8s, which will enable the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
+        data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=(8 if accelerator.use_fp16 else None))
 
-                if step % 10 == 0:
-                    logger.info("epoch: {0} [{1}/{2}]: loss: {3}, acc: {4}".format(e, step, len(train_dataloader), loss.item(), train_result))
-                tr_loss += loss.item()
-                loss_a.append(loss.item())
-                nb_tr_examples += input_ids.size(0)
-                nb_tr_steps += 1
-                
-                if (step + 1) % args.gradient_accumulation_steps == 0:
-                    optimizer.step()
-                    optimizer.zero_grad()
-                    global_step += 1
+    quantize_dataloader = DataLoader(
+        train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
+    )
+    train_dataloader = DataLoader(
+        train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
+    )
+    eval_dataloader = DataLoader(eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size)
 
-            # eval
-            eval_examples = processor.get_dev_examples(args.data_dir)
-            eval_features, label_map = convert_examples_to_features(
-                eval_examples,
-                processor.get_labels(),
-                args.max_seq_length,
-                tokenizer,
-            )
-            logger.info("***** Running evaluation *****")
-            logger.info("  Num examples = %d", len(eval_examples))
-            logger.info("  Batch size = %d", args.eval_batch_size)
-            eval_data = gen_tensor_dataset(eval_features)
-            # Run prediction for full data
-            eval_sampler = SequentialSampler(eval_data)
-            eval_dataloader = DataLoader(
-                eval_data,
-                sampler=eval_sampler,
-                batch_size=args.eval_batch_size,
-            )
+    # Optimizer
+    # Split weights in two groups, one with weight decay and the other not.
+    no_decay = ["bias", "LayerNorm.weight"]
+    optimizer_grouped_parameters = [
+        {
+            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "weight_decay": args.weight_decay,
+        },
+        {
+            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+            "weight_decay": 0.0,
+        },
+    ]
+    optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 
-            model.eval()
-            preds = None
-            out_label_ids = None
-            eval_loss = 0
-            nb_eval_steps, nb_eval_examples = 0, 0
-            for i, (input_ids, input_mask, segment_ids, label_ids) in enumerate(eval_dataloader):
-                input_ids = input_ids.to(device)
-                input_mask = input_mask.to(device)
-                segment_ids = segment_ids.to(device)
-                label_ids = label_ids.to(device)
+    # Scheduler and math around the number of training steps.
+    overrode_max_train_steps = False
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    if args.max_train_steps is None:
+        args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
+        overrode_max_train_steps = True
 
-                with torch.no_grad():
-                    logits = model(input_ids, segment_ids, input_mask)
-                    if args.do_eval:
-                        eval_loss += loss_fct(
-                            logits.view(-1, num_labels),
-                            label_ids.view(-1),
-                        ).mean().item()
+    lr_scheduler = get_scheduler(
+        name=args.lr_scheduler_type,
+        optimizer=optimizer,
+        num_warmup_steps=args.num_warmup_steps,
+        num_training_steps=args.max_train_steps,
+    )
 
-                nb_eval_steps += 1
-                nb_eval_examples += input_ids.size(0)
-                if preds is None:
-                    preds = logits.detach().cpu().numpy()
-                    out_label_ids = label_ids.detach().cpu().numpy()
-                else:
-                    preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
-                    out_label_ids = np.append(
-                        out_label_ids,
-                        label_ids.detach().cpu().numpy(),
-                        axis=0,
-                    )
+    # Prepare everything with our `accelerator`.
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
+        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
+    )
 
-            preds = np.argmax(preds, axis=1)
-            results['eval:loss'] = eval_loss / nb_eval_steps
-            eval_result = compute_metrics(args.task_name, preds, out_label_ids)
-            results.update(eval_result)
-            logger.info(eval_result)
+    # We need to recalculate our total training steps as the size of the training dataloader may have changed
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    if overrode_max_train_steps:
+        args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
+    # Afterwards we recalculate our number of training epochs
+    args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
-        tr_loss = tr_loss / nb_tr_steps
-        
+    # Figure out how many steps we should save the Accelerator states
+    checkpointing_steps = args.checkpointing_steps
+    if checkpointing_steps is not None and checkpointing_steps.isdigit():
+        checkpointing_steps = int(checkpointing_steps)
 
-        
-        model_to_save = model.module if hasattr(model, 'module') else model
-        torch.save(
-            {"model": model_to_save.state_dict()},
-            os.path.join(args.output_dir, modeling.WEIGHTS_NAME),
-        )
-        with open(
-                os.path.join(args.output_dir, modeling.CONFIG_NAME),
-                'w',
-        ) as f:
-            f.write(model_to_save.config.to_json_string())
+    # We need to initialize the trackers we use, and also store our configuration.
+    # The trackers initializes automatically on the main process.
+    if args.with_tracking:
+        experiment_config = vars(args)
+        # TensorBoard cannot log Enums, need the raw value
+        experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
+        accelerator.init_trackers("glue_no_trainer", experiment_config)
+
+    # Get the metric function
+    if args.task_name is not None:
+        metric = evaluate.load("glue", args.task_name)
+    else:
+        metric = evaluate.load("accuracy")
 
     if args.do_eval:
-        # eval
-        eval_examples = processor.get_dev_examples(args.data_dir)
-        eval_features, label_map = convert_examples_to_features(
-            eval_examples,
-            processor.get_labels(),
-            args.max_seq_length,
-            tokenizer,
-        )
-        logger.info("***** Running evaluation *****")
-        logger.info("  Num examples = %d", len(eval_examples))
-        logger.info("  Batch size = %d", args.eval_batch_size)
-        eval_data = gen_tensor_dataset(eval_features)
-        # eval_data = gen_tensor_dataset(train_features)
-        # Run prediction for full data
-        eval_sampler = SequentialSampler(eval_data)
-        eval_dataloader = DataLoader(
-            eval_data,
-            sampler=eval_sampler,
-            batch_size=args.eval_batch_size,
-        )
-
+        # Use training dataset to quantize
         model.eval()
-        preds = None
-        out_label_ids = None
-        eval_loss = 0
-        nb_eval_steps, nb_eval_examples = 0, 0
-        for i, (input_ids, input_mask, segment_ids, label_ids) in enumerate(eval_dataloader):
-            input_ids = input_ids.to(device)
-            input_mask = input_mask.to(device)
-            segment_ids = segment_ids.to(device)
-            label_ids = label_ids.to(device)
+        for i in range(math.ceil(args.quantize_batch_size / args.per_device_train_batch_size)):
+            batch = next(iter(quantize_dataloader)).to(accelerator.device)
+            model(**batch)
+        if args.layer_8bit_n > 0:
+            set_8_bit_layer_n(model, args.layer_8bit_n)
 
-            with torch.no_grad():
-                logits = model(input_ids, segment_ids, input_mask)
-                if args.do_eval:
-                    eval_loss += loss_fct(
-                        logits.view(-1, num_labels),
-                        label_ids.view(-1),
-                    ).mean().item()
+    if args.do_train:
+        # Train!
+        total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
 
-            nb_eval_steps += 1
-            nb_eval_examples += input_ids.size(0)
-            if preds is None:
-                preds = logits.detach().cpu().numpy()
-                out_label_ids = label_ids.detach().cpu().numpy()
+        logger.info("***** Running training *****")
+        logger.info(f"  Num examples = {len(train_dataset)}")
+        logger.info(f"  Num Epochs = {args.num_train_epochs}")
+        logger.info(f"  Instantaneous batch size per device = {args.per_device_train_batch_size}")
+        logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
+        logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
+        logger.info(f"  Total optimization steps = {args.max_train_steps}")
+        # Only show the progress bar once on each machine.
+        progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
+        completed_steps = 0
+        starting_epoch = 0
+        # Potentially load in the weights and states from a previous save
+        if args.resume_from_checkpoint:
+            if args.resume_from_checkpoint is not None or args.resume_from_checkpoint != "":
+                accelerator.print(f"Resumed from checkpoint: {args.resume_from_checkpoint}")
+                accelerator.load_state(args.resume_from_checkpoint)
+                path = os.path.basename(args.resume_from_checkpoint)
             else:
-                preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
-                out_label_ids = np.append(
-                    out_label_ids,
-                    label_ids.detach().cpu().numpy(),
-                    axis=0,
-                )            
+                # Get the most recent checkpoint
+                dirs = [f.name for f in os.scandir(os.getcwd()) if f.is_dir()]
+                dirs.sort(key=os.path.getctime)
+                path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
+            # Extract `epoch_{i}` or `step_{i}`
+            training_difference = os.path.splitext(path)[0]
 
-            preds1 = np.argmax(preds, axis=1)
-            results['eval:loss'] = eval_loss / nb_eval_steps
-            eval_result = compute_metrics(args.task_name, preds1, out_label_ids)
-            results.update(eval_result)
-            logger.info(eval_result)
-            # exit()
+            if "epoch" in training_difference:
+                starting_epoch = int(training_difference.replace("epoch_", "")) + 1
+                resume_step = None
+            else:
+                resume_step = int(training_difference.replace("step_", ""))
+                starting_epoch = resume_step // len(train_dataloader)
+                resume_step -= starting_epoch * len(train_dataloader)
 
-    logger.info("***** Results *****")
-    for key in sorted(results.keys()):
-        logger.info("  %s = %s", key, str(results[key]))
-    with open(os.path.join(args.output_dir, "results.txt"), "w") as writer:
-        json.dump(results, writer)
+        for epoch in range(starting_epoch, args.num_train_epochs):
+            model.train()
+            if args.with_tracking:
+                total_loss = 0
+            for step, batch in enumerate(train_dataloader):
+                # We need to skip steps until we reach the resumed step
+                if args.resume_from_checkpoint and epoch == starting_epoch:
+                    if resume_step is not None and step < resume_step:
+                        completed_steps += 1
+                        continue
+                outputs = model(**batch)
+                loss = outputs.loss
+                # We keep track of the loss at each epoch
+                if args.with_tracking:
+                    total_loss += loss.detach().float()
+                loss = loss / args.gradient_accumulation_steps
+                accelerator.backward(loss)
+                if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
+                    optimizer.step()
+                    lr_scheduler.step()
+                    optimizer.zero_grad()
+                    progress_bar.update(1)
+                    completed_steps += 1
 
-    return results
+                if isinstance(checkpointing_steps, int):
+                    if completed_steps % checkpointing_steps == 0:
+                        output_dir = f"step_{completed_steps }"
+                        if args.output_dir is not None:
+                            output_dir = os.path.join(args.output_dir, output_dir)
+                        accelerator.save_state(output_dir)
+
+                if completed_steps >= args.max_train_steps:
+                    break
+
+            model.eval()
+            samples_seen = 0
+            for step, batch in enumerate(eval_dataloader):
+                with torch.no_grad():
+                    outputs = model(**batch)
+                predictions = outputs.logits.argmax(dim=-1) if not is_regression else outputs.logits.squeeze()
+                predictions, references = accelerator.gather((predictions, batch["labels"]))
+                # If we are in a multiprocess environment, the last batch has duplicates
+                if accelerator.num_processes > 1:
+                    if step == len(eval_dataloader) - 1:
+                        predictions = predictions[: len(eval_dataloader.dataset) - samples_seen]
+                        references = references[: len(eval_dataloader.dataset) - samples_seen]
+                    else:
+                        samples_seen += references.shape[0]
+                metric.add_batch(
+                    predictions=predictions,
+                    references=references,
+                )
+
+            eval_metric = metric.compute()
+            logger.info(f"epoch {epoch}: {eval_metric}")
+            print("epoch ", epoch, ":", eval_metric)
+
+            if args.with_tracking:
+                accelerator.log(
+                    {
+                        "accuracy" if args.task_name is not None else "glue": eval_metric,
+                        "train_loss": total_loss.item() / len(train_dataloader),
+                        "epoch": epoch,
+                        "step": completed_steps,
+                    },
+                    step=completed_steps,
+                )
+
+            if args.push_to_hub and epoch < args.num_train_epochs - 1:
+                accelerator.wait_for_everyone()
+                unwrapped_model = accelerator.unwrap_model(model)
+                unwrapped_model.save_pretrained(
+                    args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
+                )
+                if accelerator.is_main_process:
+                    tokenizer.save_pretrained(args.output_dir)
+                    repo.push_to_hub(
+                        commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
+                    )
+
+            if args.checkpointing_steps == "epoch":
+                output_dir = f"epoch_{epoch}"
+                if args.output_dir is not None:
+                    output_dir = os.path.join(args.output_dir, output_dir)
+                accelerator.save_state(output_dir)
+    model.eval()
+    samples_seen = 0
+    for step, batch in enumerate(eval_dataloader):
+        with torch.no_grad():
+            outputs = model(**batch)
+        predictions = outputs.logits.argmax(dim=-1) if not is_regression else outputs.logits.squeeze()
+        predictions, references = accelerator.gather((predictions, batch["labels"]))
+        # If we are in a multiprocess environment, the last batch has duplicates
+        if accelerator.num_processes > 1:
+            if step == len(eval_dataloader) - 1:
+                predictions = predictions[: len(eval_dataloader.dataset) - samples_seen]
+                references = references[: len(eval_dataloader.dataset) - samples_seen]
+            else:
+                samples_seen += references.shape[0]
+        metric.add_batch(
+            predictions=predictions,
+            references=references,
+        )
+
+    eval_metric = metric.compute()
+    logger.info(f"Final evaluate: {eval_metric}")
+    
+    if args.with_tracking:
+        accelerator.end_training()
+
+    # if args.output_dir is not None:
+    #     accelerator.wait_for_everyone()
+    #     unwrapped_model = accelerator.unwrap_model(model)
+    #     unwrapped_model.save_pretrained(
+    #         args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
+    #     )
+    #     if accelerator.is_main_process:
+    #         tokenizer.save_pretrained(args.output_dir)
+    #         if args.push_to_hub:
+    #             repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
+
+    print(eval_metric)
+    if args.output_dir is not None:
+        with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
+            json.dump({"eval_accuracy": eval_metric}, f)
 
 
 if __name__ == "__main__":
-    main(args)
+    main()
