@@ -3,7 +3,7 @@
 
 You can run the following scripts to reproduce the results in the paper. The results may slightly differ from those in the paper due to version updates of some libraries.
 
-```shell
+```bash
 ./scripts/run_all.sh
 ```
 

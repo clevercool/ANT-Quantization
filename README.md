@@ -9,7 +9,7 @@ Transformer-based large language models (LLMs) have achieved great success with 
 We propose OliVe, an algorithm/architecture co-designed so- lution that adopts an outlier-victim pair (OVP) quantization and handles outlier values locally with low hardware overheads and high performance gains. The key insight of OliVe is that outliers are important while the normal values next to them are not. Thus those normal values (called victims) can be sacrificed to accommodate outliers. This enables a memory-aligned OVP encoding scheme, which can be efficiently integrated to the existing hardware accel- erators like systolic array and tensor core. As a result, OliVe-based accelerator surpasses the existing outlier-aware accelerator, GOBO, by 4.5× speedup and 4.0× energy reduction, respectively, with a superior model accuracy.
 
 ## Citation
-```
+```bibtex
 @article{guo2023olive,
     author = {Guo, Cong and Tang, Jiaming and Hu, Weiming and Leng, Jingwen and Zhang, Chen and Yang, Fan and Liu, Yunxin and Guo, Minyi and Zhu, Yuhao},
     title = {OliVe: Accelerating Large Language Models via Hardware-friendly Outlier-Victim Pair Quantization},

@@ -1,6 +1,6 @@
 # OliVe Quantization
 ## Environment
-```
+```bash
 conda create -n OliVe python=3.8
 conda activate OliVe
 
