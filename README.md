@@ -2,7 +2,7 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7002115.svg)](https://doi.org/10.5281/zenodo.7002115)
 
 ## Citation
-If you use ANT in your research, please cite our paper:
+If you use ANT or OliVe in your research, please cite our paper:
 ```bibtex
 @inproceedings{guo2022ant,
   title={ANT: Exploiting Adaptive Numerical Data Type for Low-bit Deep Neural Network Quantization},
@@ -13,7 +13,7 @@ If you use ANT in your research, please cite our paper:
   organization={IEEE}
 }
 ```
-If you use OliVe in your research, please cite our paper:
+
 ```bibtex
 @article{guo2023olive,
     author = {Guo, Cong and Tang, Jiaming and Hu, Weiming and Leng, Jingwen and Zhang, Chen and Yang, Fan and Liu, Yunxin and Guo, Minyi and Zhu, Yuhao},
@@ -25,7 +25,9 @@ If you use OliVe in your research, please cite our paper:
 ```
 
 
-This repository contains the source code for reproducing the experiments in the paper "ANT: Exploiting Adaptive Numerical Data Type for Low-bit Deep Neural Network Quantization" at MICRO'22 and "OliVe: Accelerating Large Language Models via Hardware-friendly Outlier-Victim Pair Quantization" at ISCA'23.
+This repository contains the source code for reproducing the experiments in the paper `"ANT: Exploiting Adaptive Numerical Data Type for Low-bit Deep Neural Network Quantization"` at MICRO'22 and `"OliVe: Accelerating Large Language Models via Hardware-friendly Outlier-Victim Pair Quantization"` at ISCA'23.
+
+## Project Structure
 
 `ant_quantization` contains the ANT framework with PyTorch.
 
