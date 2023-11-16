@@ -3,14 +3,14 @@ dataset=${2:-"wikitext"}
 dataset_config=${3:-"wikitext-103-raw-v1"}
 q_mode=${4:-"ant-int-flint"}
 q_bit=${5:-"4"}
-batch_size=${6:-"8"}
+batch_size=${6:-"1"}
 port=${7:-46666}
 desc=${8:-""}
 n8=${9:-"0"}
 
 mkdir -p ./log
-mkdir -p ./log/bigscience
-mkdir -p ./log/facebook
+mkdir -p ./log/LLAMA
+mkdir -p ./log/OPT
 
 log_name=""
 if [ "$dataset" = "wikitext" ] ; then
