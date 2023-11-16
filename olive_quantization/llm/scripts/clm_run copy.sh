@@ -19,7 +19,7 @@ else
   log_name=$transformer_model"_"$dataset"_"$q_bit"bit_batch"$batch_size"_"$desc
 fi
 
-torchrun --nproc_per_node=1 --master_port $port run_clm.py \
+python -u -m torch.distributed.launch --nproc_per_node=1 --master_port $port run_clm.py \
   --model_name_or_path $transformer_model \
   --dataset_name $dataset --dataset_config_name $dataset_config \
   --output_dir checkpoints/$transformer_model \
