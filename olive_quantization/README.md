@@ -43,7 +43,7 @@ CUDA_VISIBLE_DEVICES=1 ./scripts/clm_run.sh LLAMA/llama-7b c4 realnewslike ant-i
 
 其中：
 
-LLAMA/llama-7b：是存放模型软连接的文件夹，改成opt模型的话：OPT/opt-.7b
+LLAMA/llama-7b：是存放模型软连接的文件夹，改成opt模型的话：OPT/opt-7b
 
 c4 realnewslike：是数据集选择，选Wikitext数据集改成：wikitext wikitext-103-raw-v1
 
@@ -52,3 +52,5 @@ c4 realnewslike：是数据集选择，选Wikitext数据集改成：wikitext wik
 2：batch_size大小
 
 所有脚本参数的设定在 clm_run.sh 文件里
+实验结果在./llm/checkpoints中
+实验日志在./llm/log中
