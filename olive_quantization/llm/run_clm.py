@@ -526,6 +526,7 @@ def main():
                 "Picking 1024 instead. You can change that default value by passing --block_size xxx."
             )
             block_size = 1024
+            tokenizer.model_max_length = block_size/4
     else:
         if data_args.block_size > tokenizer.model_max_length:
             logger.warning(
@@ -533,6 +534,7 @@ def main():
                 f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
             )
         block_size = min(data_args.block_size, tokenizer.model_max_length)
+        tokenizer.model_max_length = block_size/4
 
     # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
     def group_texts(examples):
@@ -590,7 +592,7 @@ def main():
                 logits = logits[0]
             return logits.argmax(dim=-1)
 
-        metric = evaluate.load("accuracy")
+        metric = evaluate.load("./accuracy/accuracy.py")
 
         def compute_metrics(eval_preds):
             preds, labels = eval_preds
