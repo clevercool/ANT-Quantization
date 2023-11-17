@@ -3,14 +3,14 @@ dataset=${2:-"wikitext"}
 dataset_config=${3:-"wikitext-103-raw-v1"}
 q_mode=${4:-"ant-int-flint"}
 q_bit=${5:-"4"}
-batch_size=${6:-"4"}
+batch_size=${6:-"8"}
 port=${7:-46666}
 desc=${8:-""}
 n8=${9:-"0"}
 
 mkdir -p ./log
-mkdir -p ./log/LLAMA
-mkdir -p ./log/OPT
+mkdir -p ./log/bigscience
+mkdir -p ./log/facebook
 
 log_name=""
 if [ "$dataset" = "wikitext" ] ; then
@@ -19,7 +19,7 @@ else
   log_name=$transformer_model"_"$dataset"_"$q_bit"bit_batch"$batch_size"_"$desc
 fi
 
-torchrun --nproc_per_node=1 --master_port $port run_clm.py \
+python -u -m torch.distributed.launch --nproc_per_node=1 --master_port $port run_clm.py \
   --model_name_or_path $transformer_model \
   --dataset_name $dataset --dataset_config_name $dataset_config \
   --output_dir checkpoints/$transformer_model \
